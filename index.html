@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>NexusFlow – HTTP Control Panel</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+<div class="neon-wires">
+    <svg viewBox="0 0 800 600">
+        <polyline class="wire" points="50,100 200,150 400,80 650,120" />
+        <polyline class="wire" points="100,300 350,260 600,320" />
+        <polyline class="wire" points="150,500 400,450 700,520" />
+    </svg>
+</div>
+
+<canvas id="globe" class="globe"></canvas>
+
+<div id="alert-panel" class="alert-panel hidden">
+    <div class="alert-title">SYSTEM WARNING</div>
+    <div id="alert-message"></div>
+</div>
+
+<div class="app">
+    <header class="top-bar">
+        <div class="logo">▸ NexusFlow_<span class="blink">_</span></div>
+        <nav class="nav">
+            <a href="#panel">Panel</a>
+            <a href="#status">Status</a>
+            <a href="#presets">Presets</a>
+        </nav>
+        <div class="state-pill" id="state-pill">STATE: IDLE</div>
+    </header>
+
+    <main>
+        <section id="panel" class="section">
+            <h1>HTTP CONTROL PANEL</h1>
+            <p class="subtitle">
+                Local tool for sending HTTP requests through proxies with rotation, timing and live logs.
+                All traffic is executed by your Python script – nothing leaves your machine except requests.
+            </p>
+
+            <div class="grid-3">
+                <div class="card">
+                    <h2>TARGET &amp; PAYLOAD</h2>
+                    <label>
+                        HTTP METHOD
+                        <select id="method">
+                            <option value="GET">GET (View mode)</option>
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                            <option value="DELETE">DELETE</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        ENGINE MODE
+                        <select id="mode">
+                            <option value="http">HTTP Requests (default)</option>
+                            <option value="playwright">Playwright Browser</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        TARGET URL
+                        <input id="url" type="text" placeholder="https://example.com/api">
+                    </label>
+
+                    <label>
+                        BODY / PAYLOAD (JSON or raw, disabled in VIEW mode)
+                        <textarea id="body" rows="8" placeholder='{"name": "John Doe", "email": "john@example.com"}'></textarea>
+                    </label>
+
+                    <label>
+                        EXTRA HEADERS (KEY:VALUE per line)
+                        <textarea id="headers" rows="5" placeholder="Content-Type: application/json&#10;X-Custom: 123"></textarea>
+                    </label>
+
+                    <label>
+                        USER-AGENTS (one per line, optional)
+                        <textarea id="user_agents" rows="4" placeholder="Mozilla/5.0 (Windows NT 10.0; Win64; x64)..."></textarea>
+                    </label>
+                </div>
+
+                <div class="card">
+                    <h2>PROXIES, TIMING &amp; CONCURRENCY</h2>
+
+                    <label>
+                        PROXY MODE
+                        <select id="proxy_mode">
+                            <option value="rotate">Rotate proxies</option>
+                            <option value="direct">Direct (my IP only)</option>
+                            <option value="my_ip_plus_proxy">Mix my IP + proxies</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        PROXIES (one per line, host:port or full URL)
+                        <textarea id="proxies" rows="9" placeholder="185.12.34.56:3128&#10;51.77.23.10:8080"></textarea>
+                    </label>
+
+                    <div class="cols-2">
+                        <label>
+                            INTERVAL PER TICK (ms)
+                            <input id="interval_ms" type="number" value="1000" min="10">
+                        </label>
+
+                        <label>
+                            REQUEST TIMEOUT (s)
+                            <input id="timeout" type="number" value="10" min="1">
+                        </label>
+                    </div>
+
+                    <div class="cols-2">
+                        <label>
+                            CONCURRENCY (threads)
+                            <input id="concurrency" type="number" value="1" min="1" max="64">
+                        </label>
+
+                        <label>
+                            MAX TOTAL REQUESTS (0 = unlimited)
+                            <input id="max_requests" type="number" value="0" min="0">
+                        </label>
+                    </div>
+
+                    <div class="button-row">
+                        <button id="start-btn" class="btn primary">START</button>
+                        <button id="stop-btn" class="btn danger">STOP</button>
+                    </div>
+
+                    <p class="hint">
+                        VIEW MODE: when method is GET, body is ignored and a browser-like
+                        request is sent through optional proxies.
+                        Playwright mode uses a real headless browser for the target URL with a pre-test.
+                    </p>
+                </div>
+
+                <div class="card">
+                    <h2>REQUEST CHAIN (OPTIONAL)</h2>
+                    <p class="help">
+                        Define a sequence of different requests. If this is valid JSON, it overrides
+                        the single target above. Each item can have its own URL, method, body and headers.
+                        You can also add <code>"mode": "playwright"</code> on a step to force browser mode for it.
+                    </p>
+<textarea id="request_chain" rows="18" class="mono" placeholder='[
+  {
+    "method": "POST",
+    "url": "https://example.com/login",
+    "data": {"user": "a", "pass": "b"},
+    "headers": {"X-Mode": "fast"}
+  },
+  {
+    "method": "GET",
+    "mode": "playwright",
+    "url": "https://example.com/dashboard"
+  }
+]'></textarea>
+                    <p class="hint">
+                        Leave empty for single-request mode. Chain is executed for each tick &amp; concurrency slot.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section id="status" class="section">
+            <h1>RUNTIME STATUS</h1>
+            <p class="subtitle">
+                Live stats from the worker thread. Log is polled via AJAX; status snapshot is refreshed once per second.
+            </p>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>STATS</h2>
+                    <div class="stats-grid">
+                        <div>
+                            <div class="label">STATE</div>
+                            <div class="value" id="stat-state">Idle</div>
+                        </div>
+                        <div>
+                            <div class="label">TOTAL</div>
+                            <div class="value" id="stat-total">0</div>
+                        </div>
+                        <div>
+                            <div class="label">SUCCESS</div>
+                            <div class="value good" id="stat-success">0</div>
+                        </div>
+                        <div>
+                            <div class="label">FAILED</div>
+                            <div class="value bad" id="stat-failed">0</div>
+                        </div>
+                        <div>
+                            <div class="label">LAST STATUS</div>
+                            <div class="value" id="stat-last-status">-</div>
+                        </div>
+                        <div>
+                            <div class="label">LAST PROXY</div>
+                            <div class="value" id="stat-last-proxy">-</div>
+                        </div>
+                        <div>
+                            <div class="label">LAST ERROR</div>
+                            <div class="value" id="stat-last-error">-</div>
+                        </div>
+                        <div>
+                            <div class="label">UPTIME (s)</div>
+                            <div class="value" id="stat-uptime">0</div>
+                        </div>
+                    </div>
+
+                    <h3>PROXY SCORES</h3>
+                    <div id="proxy-table" class="proxy-table">
+                        <div class="proxy-head">
+                            <span>Proxy</span><span>OK</span><span>Fail</span><span>Score</span>
+                        </div>
+                        <div id="proxy-body"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>LIVE LOG</h2>
+                    <div id="log-window" class="log-window"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="presets" class="section">
+            <h1>PRESETS</h1>
+            <p class="subtitle">
+                Presets are just JSON snippets you can copy in/out manually for now.
+                You can save your favourite configs somewhere safe and paste them back here.
+            </p>
+            <div class="card">
+<textarea class="mono" rows="10" id="preset-dump" placeholder='{
+  "method": "POST",
+  "mode": "http",
+  "proxy_mode": "rotate",
+  "url": "https://example.com/api",
+  "headers": "Content-Type: application/json",
+  "body": "{\"foo\":\"bar\"}",
+  "proxies": "1.2.3.4:8080",
+  "interval_ms": 1000,
+  "timeout": 10,
+  "concurrency": 1,
+  "max_requests": 0
+}'></textarea>
+                <div class="button-row">
+                    <button class="btn" id="load-from-preset">LOAD INTO FORM</button>
+                    <button class="btn" id="dump-from-form">DUMP FROM FORM</button>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+<script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
