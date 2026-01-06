@@ -21,7 +21,7 @@ The interface features a **real-time, neon-styled dashboard** with live logging,
 
 ## Key Features
 
-### 🎮 **Traffic Orchestration**
+### **Traffic Orchestration**
 * **Multi-Threaded Execution:** Run concurrent requests with adjustable concurrency limits.
 * **Request Chaining:** Define complex workflows (e.g., *Login* → *Get Token* → *Scrape Data*) using JSON-based chains.
 * **Custom Payloads:** Full control over Methods (GET/POST/PUT/DELETE), Headers, Body, and User-Agents.
